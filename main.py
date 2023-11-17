@@ -1,11 +1,20 @@
+from typing import Optional,List
 from fastapi import Body, FastAPI
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel
 from pymongo import MongoClient
 
 app = FastAPI()
 client = MongoClient("mongodb://localhost:27017/")
 database = client.students
 collection = database.get_collection("whatsapp")
+
+class groupMessages(BaseModel):
+    group_number : int
+    messages : List[str] # type: ignore
+
+class updateGroupMessages(BaseModel):
+    messages : Optional[List[str]] = None # type: ignore
 
 def message_decoder(message):
     return {
@@ -18,19 +27,41 @@ def message_decoder(message):
 async def get_messages(grp_number):
     messages = []
     data =  collection.find_one({"group_number": grp_number})
-    for msg in data["messages_1"]: # type: ignore
+    for msg in data["messages"]: # type: ignore
         messages.append(msg)
     return messages
 
 
+@app.get("/messages/{group_number}")
+async def showMessage(group_number:int):
+    return await get_messages(group_number)
+
 @app.get("/")
-async def root(): # type: ignore 
-    # messages = []
-    # data =  collection.find_one({"group_number": 1})
-    # for msg in data["messages_1"]: # type: ignore
-    #     messages.append(msg)
-    # return messages
-    return await get_messages(1)
+async def root():
+    return "Hello World"
+
+@app.post("/")
+async def addMessage(grpmsg : groupMessages):
+    data =  collection.insert_one(grpmsg.model_dump())
+    return "Message added to the database"
+
+@app.put("/update/{group_number}")
+async def updateMessage(group_number:int,new_messages:updateGroupMessages):
+    print(new_messages.model_dump()['messages'])
+    data =  collection.find_one({"group_number": group_number})
+    if data!= None:
+        print("inside")
+        print(data['messages'])
+        data["messages"].extend(new_messages.model_dump()['messages'])
+        print(data['messages'])
+        # new messages will be in form of list say [m1,m2,m3......]
+        update_data = collection.find_one_and_update(
+                {"group_number": group_number},
+                {"$set": {"messages":data["messages"]} }
+            )
+
+    return "Message updated to the database"
+    
 
 
 # schema example 
